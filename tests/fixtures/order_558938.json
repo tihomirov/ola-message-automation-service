@@ -1,0 +1,61 @@
+{
+  "type": "success",
+  "result": {
+    "Model": {
+      "ID": 558938,
+      "OrderNumber": "B982B",
+      "CurrencyCode": "₴",
+      "UserID": 565314,
+      "UserName": "Test Customer",
+      "UserEmail": "buyer@example.com",
+      "UserPhone": "+380670000000",
+      "UserComments": "Тест",
+      "TotalAmount": "2920,00",
+      "ProductsAmount": "2920,00",
+      "StatusID": 1327,
+      "PaymentID": 6347,
+      "DeliveryID": 7688,
+      "Delivery": {
+        "DeliveryMethodID": 7688,
+        "PickupAddressFull": {
+          "FirstName": "Test",
+          "LastName": "Customer",
+          "PhoneNumber": "+380670000000",
+          "City": "Харків",
+          "Address": "Харків, Відділення №1: вул. Польова, 67",
+          "Name": "Самовивіз з «Нова Пошта»"
+        },
+        "DeliveryAddressFull": null,
+        "DeliveryCost": "0,00",
+        "Name": "Самовивіз з «Нова Пошта»",
+        "IsPickup": true
+      },
+      "Products": [
+        {
+          "OrderProductID": 1056880,
+          "ProductID": 5525195,
+          "ProductModificationID": 8706899,
+          "Count": 1,
+          "Price": 5840.0,
+          "FinalCost": "2920,00",
+          "FinalPrice": 2920.0,
+          "Image": "/webcache/media/shop-20417/_tn/images/img_8191.jpg",
+          "ImageLink": "/Media/shop-20417/images/IMG_8191.jpg",
+          "Sku": "14556947470",
+          "Name": "Класична шовковиста піжама з кантом",
+          "NameDetails": "",
+          "ModificationName": "Розмір: XS/S, Колір: Чорний"
+        }
+      ],
+      "Additions": [],
+      "DateCreate": "2025-02-28T19:10:43.82Z"
+    },
+    "Initiator": {
+      "Statuses": {"0": "Необроблені", "1033": "В роботі", "1034": "Оброблені", "1035": "Повернуті", "1036": "Скасовані", "1236": "Оплачені", "1327": "Фейкові"},
+      "PaymentMethods": {"0": "Не вибрано", "6347": "Оплата картами Visa, Mastercard, Apple Pay, Google Pay", "6441": "Накладений платіж (оплата при отриманні)"}
+    },
+    "Title": "Замовлення #558938"
+  },
+  "redirect": null,
+  "view": null
+}
