@@ -7,9 +7,10 @@ keys are an error (catches typos). In P1 the backoffice edits this file.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field, fields, is_dataclass
+import tempfile
+from dataclasses import asdict, dataclass, field, fields, is_dataclass
 from pathlib import Path
-from typing import Any, get_type_hints
+from typing import Any, get_args, get_type_hints
 
 import yaml
 
@@ -66,6 +67,33 @@ class ShopConfigSection:  # used only when features.fetch_order_details is true
 
 
 @dataclass
+class LinkConfig:
+    name: str = ""
+    url: str = ""  # Jinja template, e.g. https://wa.me/{{ customer.phone_e164 }}
+
+
+def _default_links() -> list[LinkConfig]:
+    return [
+        LinkConfig("Telegram", "https://t.me/+{{ customer.phone_e164 }}"),
+        LinkConfig("Viber", "viber://chat?number=%2B{{ customer.phone_e164 }}"),
+        LinkConfig("WhatsApp", "https://wa.me/{{ customer.phone_e164 }}"),
+    ]
+
+
+@dataclass
+class TemplateConfig:
+    text: str = ""  # Jinja message template; empty = built-in message
+    links: list[LinkConfig] = field(default_factory=_default_links)
+
+
+@dataclass
+class AdminConfig:  # set with: python -m app.cli set-password
+    password_hash: str = ""
+    session_secret: str = ""
+    session_hours: int = 168
+
+
+@dataclass
 class StorageConfig:
     db_path: str = "data/ola.db"  # relative to the project folder
     max_size_mb: int = 50
@@ -79,6 +107,8 @@ class AppConfig:
     email: EmailChannelConfig = field(default_factory=EmailChannelConfig)
     shop: ShopConfigSection = field(default_factory=ShopConfigSection)
     storage: StorageConfig = field(default_factory=StorageConfig)
+    template: TemplateConfig = field(default_factory=TemplateConfig)
+    admin: AdminConfig = field(default_factory=AdminConfig)
 
     def smtp_username(self) -> str:
         return self.email.username or self.mailbox.username
@@ -141,13 +171,78 @@ def _build(cls: type, data: Any, path: str) -> Any:
             kwargs[name] = value
         elif t is str:
             kwargs[name] = "" if value is None else str(value)
-        else:  # list[str]
+        else:  # list[str] or list[<dataclass>]
             if value is None:
                 value = []
             if not isinstance(value, list):
                 raise ConfigError(f"{key}: expected a list")
-            kwargs[name] = [str(v).strip() for v in value if str(v).strip()]
+            (item_t,) = get_args(t) or (str,)
+            if is_dataclass(item_t):
+                kwargs[name] = [_build(item_t, v, f"{key}[{i}]") for i, v in enumerate(value)]
+            else:
+                kwargs[name] = [str(v).strip() for v in value if str(v).strip()]
     return cls(**kwargs)
+
+
+# ------------------------------------------------------------------ API helpers
+MASK = "••••••"
+# (section, field) pairs that are never returned by the API
+SECRET_FIELDS = {
+    ("mailbox", "password"),
+    ("email", "password"),
+    ("shop", "login_password"),
+    ("shop", "cookie"),
+}
+HIDDEN_SECTIONS = {"admin"}  # not readable/writable through the API at all
+
+
+def to_dict(cfg: AppConfig) -> dict:
+    return asdict(cfg)
+
+
+def masked_dict(cfg: AppConfig) -> dict:
+    """Config for the UI: secrets replaced by MASK (or '' when unset), admin removed."""
+    d = to_dict(cfg)
+    for section in HIDDEN_SECTIONS:
+        d.pop(section, None)
+    for section, name in SECRET_FIELDS:
+        d[section][name] = MASK if d[section][name] else ""
+    return d
+
+
+def merge_update(cfg: AppConfig, update: dict) -> AppConfig:
+    """Apply a (partial) update from the UI. Secrets equal to MASK, missing or None
+    keep their stored value; '' clears them. Raises ConfigError on bad input."""
+    current = to_dict(cfg)
+    for section, values in (update or {}).items():
+        if section in HIDDEN_SECTIONS:
+            raise ConfigError(f"{section}: cannot be changed here")
+        if section not in current or not isinstance(current[section], dict):
+            raise ConfigError(f"unknown section: {section}")
+        if not isinstance(values, dict):
+            raise ConfigError(f"{section}: expected a mapping")
+        for name, value in values.items():
+            if (section, name) in SECRET_FIELDS and (value is None or value == MASK):
+                continue
+            current[section][name] = value
+    return _build(AppConfig, current, "")
+
+
+def save_config(cfg: AppConfig, path: Path | str | None = None) -> None:
+    """Atomic write with chmod 600 (the file holds passwords)."""
+    p = Path(path) if path else config_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    text = yaml.safe_dump(to_dict(cfg), allow_unicode=True, sort_keys=False, width=120)
+    fd, tmp = tempfile.mkstemp(dir=p.parent, prefix=".config-", suffix=".yaml")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write("# Written by the OLA service. Also editable by hand (restart after).\n")
+            f.write(text)
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, p)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
 
 
 def config_path() -> Path:

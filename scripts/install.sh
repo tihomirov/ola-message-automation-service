@@ -37,3 +37,8 @@ echo
 echo ">> Open in a browser:"
 echo "   on the phone:   http://localhost:$PORT"
 for ip in $(hostname -I); do echo "   VM address:     http://$ip:$PORT"; done
+
+echo
+echo ">> Next steps:"
+echo "   1. Set the backoffice password:   .venv/bin/python -m app.cli set-password"
+echo "   2. Open the backoffice and fill in Settings (mailbox + email), or edit config.yaml"

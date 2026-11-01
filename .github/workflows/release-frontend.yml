@@ -1,0 +1,52 @@
+# Builds the Angular backoffice (frontend/) and commits the bundle to app/static/ on main.
+# Run it from GitHub: Actions → Release frontend → Run workflow.
+# Then on the server: git pull && sudo systemctl restart ola-service
+name: Release frontend
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-frontend
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        run: npm ci
+        working-directory: frontend
+
+      - name: Build
+        run: npx ng build --configuration production
+        working-directory: frontend
+
+      - name: Copy bundle to app/static
+        run: |
+          rm -rf app/static
+          cp -r frontend/dist/ola-backoffice/browser app/static
+          echo "${GITHUB_SHA}" > app/static/BUILD_COMMIT
+
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A app/static
+          if git diff --cached --quiet; then
+            echo "Bundle unchanged, nothing to commit."
+            exit 0
+          fi
+          git commit -m "frontend build ${GITHUB_SHA::7}"
+          git push

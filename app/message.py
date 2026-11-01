@@ -21,6 +21,14 @@ SIZE_PLACEHOLDER = "❓ уточнити!!!"
 
 
 @dataclass
+class EmailOrderItem:
+    name: str
+    price: str
+    qty: int
+    sum: str
+
+
+@dataclass
 class EmailOrder:
     """What we can always get from the order email itself (no site access)."""
 
@@ -35,6 +43,7 @@ class EmailOrder:
     payment: str | None = None
     additions: str | None = None
     comment: str | None = None
+    item_details: list[EmailOrderItem] = field(default_factory=list)
 
 
 def phone_digits(phone: str | None) -> str | None:

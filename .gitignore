@@ -8,3 +8,8 @@ cookie.txt
 _to_delete/
 # real order emails (customer data)
 samples/
+
+# frontend (build output is committed to app/static/ only by the GitHub Action)
+frontend/node_modules/
+frontend/dist/
+frontend/.angular/

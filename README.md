@@ -8,9 +8,10 @@ Watches a Gmail inbox for the shop's "new order" emails, builds a notification (
 | Email notifications | ✅ |
 | Order email parser (direct, auto-forwarded, manual "Fwd:") | ✅ |
 | History and dedupe (SQLite, size-capped) | ✅ |
-| Status page (`/`) and `/health` | ✅ |
+| Backoffice (Angular 22): status, orders, settings, message template + preview | ✅ |
+| Configurable message template (Jinja) and links | ✅ |
 | Flow 2: shop login, order lookup and sizes | ✅ off by default |
-| Backoffice (Angular) | ⏳ planned |
+| `/health` (JSON) and `/status-lite` (no login) | ✅ |
 
 ## How it works
 
@@ -36,7 +37,15 @@ cd ola-message-service
 bash scripts/install.sh          # default port 8080; creates config.yaml (disabled)
 ```
 
-Open `http://localhost:8080` in the phone's browser. If the Terminal app asks to allow port forwarding for 8080, allow it. Until you configure it, the status page shows **Mail worker: not running** and the reason.
+Then set the backoffice password:
+
+```bash
+.venv/bin/python -m app.cli set-password
+```
+
+Open `http://localhost:8080` in the phone's browser. If the Terminal app asks to allow port forwarding for 8080, allow it.
+
+Until the first frontend build has been released (see [Releasing the backoffice](#releasing-the-backoffice)), `/` shows the simple status page instead of the backoffice.
 
 ## Setup
 
@@ -56,7 +65,11 @@ Pick one:
 
 Both keep the original sender, so nothing else is needed. If you sometimes forward an order by hand ("Fwd:"), add your address to `mailbox.allowed_forwarders`.
 
-### 3. Fill in config.yaml
+### 3. Configure
+
+**In the backoffice:** open **Settings**, fill in the mailbox (Gmail address + app password) and "Send to", turn on both switches, and click **Save**. The mail worker restarts with the new settings.
+
+**Or in config.yaml:**
 
 ```bash
 nano config.yaml        # created by install.sh; config.example.yaml has every option with comments
@@ -79,6 +92,10 @@ The email channel sends from the bot account with the same app password, unless 
 
 ### 4. Test, then start
 
+In the backoffice (Settings page): **Test mailbox**, **Send test email**, **Dry run**. The dry run shows what the next poll would send, without sending anything or adding labels.
+
+Or from the terminal:
+
 ```bash
 .venv/bin/python -m app.worker --test-email          # sends a test email to email.to
 .venv/bin/python -m app.worker --once --dry-run      # reads the mailbox, prints the messages it WOULD send
@@ -89,6 +106,31 @@ sudo journalctl -u ola-service -f                    # watch it work
 The dry run doesn't send anything or add labels. The status page shows the last poll, the result counts, errors and the DB size.
 
 To process one poll by hand (sends for real and adds labels): `.venv/bin/python -m app.worker --once`.
+
+## Backoffice
+
+| Page | What it does |
+|---|---|
+| **Status** | Mail worker state and why it isn't running, last poll/result/error, order counts, DB size, memory, network, VM pause/restart gaps. Refreshes every 30 s |
+| **Orders** | History: sent / retrying / failed, with the sent message, errors and the parsed email data |
+| **Settings** | Flow toggle, mailbox, email channel, storage. Buttons: Test mailbox, Send test email, Dry run |
+| **Message** | Email subject, message template (Jinja), links library, live preview with a sample or a real order number |
+| **Shop** | Only in flow 2: shop login, fallback cookie, test fetch by order number |
+
+- **Passwords** are never sent back to the browser: they show as `••••••`. Leave them as is to keep them, or type a new one.
+- **Login:** one admin password. Set or reset it with `.venv/bin/python -m app.cli set-password`, which also logs out every session. The session lasts 7 days (`admin.session_hours`).
+- **Message template:** empty means the built-in message. **Load default** gives an editable template with the same layout. If a saved template breaks at runtime, the built-in message is sent instead, so no order is lost.
+
+### Releasing the backoffice
+
+The Angular app lives in `frontend/`. The phone can't build it (not enough RAM), so GitHub builds it:
+
+1. Push your changes.
+2. On GitHub: **Actions → Release frontend → Run workflow**. It builds `frontend/` and commits the bundle to `app/static/` on `main`.
+3. On your laptop: `git pull`, because the action added a commit.
+4. On the server: `git pull && sudo systemctl restart ola-service`.
+
+If a change touches both the API and the UI, release the frontend before updating the server. The Status page shows which frontend build is running. Development setup: see `frontend/README.md`.
 
 ## Configuration reference
 
@@ -107,6 +149,9 @@ To process one poll by hand (sends for real and adds labels): `.venv/bin/python 
 | `email.subject` | `🛍 Нове замовлення №{number} — {customer_name}` | Also `{phone}`, `{total}`, `{delivery}`, `{payment}` |
 | `email.smtp_port` | `587` | `587` = STARTTLS, `465` = SSL |
 | `storage.max_size_mb` / `retention_days` | `50` / `180` | DB size cap: older rows are deleted first |
+| `template.text` | empty | Jinja message template; empty = built-in message |
+| `template.links` | Telegram, Viber, WhatsApp | Links library (URL templates) |
+| `admin.*` | — | Set by `app.cli set-password`; not editable in the backoffice |
 
 ## Preview the message for a single email
 

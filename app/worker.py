@@ -20,7 +20,7 @@ import hashlib
 import logging
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Protocol
 
 from .config import AppConfig
@@ -98,7 +98,7 @@ def process_once(cfg: AppConfig, mailbox: Mailbox, mailer: Mailer | None, store:
                 mailbox.add_label(uid, mb.processed_label)
             continue
 
-        note = build_notification(order, features, fetcher)
+        note = build_notification(order, features, fetcher, cfg)
         subject = render_subject(cfg.email.subject, vars(order))
         if dry_run:
             res.previews.append((subject, note.text))
@@ -118,7 +118,8 @@ def process_once(cfg: AppConfig, mailbox: Mailbox, mailer: Mailer | None, store:
             else:
                 res.retry += 1
             continue
-        store.record_sent(order.number, parsed.message_id, note.text, note.fetch_status)
+        store.record_sent(order.number, parsed.message_id, note.text, note.fetch_status,
+                          data=asdict(order))
         mailbox.add_label(uid, mb.processed_label)
         res.sent += 1
         log.info("order %s: notification sent", order.number)

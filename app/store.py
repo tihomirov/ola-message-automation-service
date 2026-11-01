@@ -7,6 +7,7 @@ file is still over max_size_mb the oldest rows go and the file is VACUUMed.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import threading
 from datetime import datetime, timedelta, timezone
@@ -45,6 +46,9 @@ class Store:
         with self._conn() as c:
             c.execute("PRAGMA journal_mode=WAL")
             c.executescript(SCHEMA)
+            cols = {r[1] for r in c.execute("PRAGMA table_info(orders)")}
+            if "data" not in cols:  # added after the first release
+                c.execute("ALTER TABLE orders ADD COLUMN data TEXT")
 
     def _conn(self) -> sqlite3.Connection:
         c = sqlite3.connect(self.path, timeout=10)
@@ -61,16 +65,18 @@ class Store:
         return bool(rows)
 
     def record_sent(self, number: str, message_id: str | None, message: str,
-                    fetch_status: str | None = None) -> None:
+                    fetch_status: str | None = None, data: dict | None = None) -> None:
         now = _now()
+        blob = json.dumps(data, ensure_ascii=False) if data is not None else None
         self._exec(
             """INSERT INTO orders(number, message_id, status, attempts, fetch_status, message,
-                                  last_error, created_at, updated_at)
-               VALUES(?, ?, 'sent', 1, ?, ?, NULL, ?, ?)
+                                  last_error, data, created_at, updated_at)
+               VALUES(?, ?, 'sent', 1, ?, ?, NULL, ?, ?, ?)
                ON CONFLICT(number) DO UPDATE SET status='sent', attempts=attempts+1,
                    message_id=excluded.message_id, fetch_status=excluded.fetch_status,
-                   message=excluded.message, last_error=NULL, updated_at=excluded.updated_at""",
-            (number, message_id, fetch_status, message, now, now),
+                   message=excluded.message, last_error=NULL,
+                   data=COALESCE(excluded.data, data), updated_at=excluded.updated_at""",
+            (number, message_id, fetch_status, message, blob, now, now),
         )
 
     def record_failure(self, number: str, message_id: str | None, error: str,
@@ -99,12 +105,22 @@ class Store:
 
     def get_order(self, number: str) -> dict | None:
         rows = self._exec("SELECT * FROM orders WHERE number=?", (number,))
-        return dict(rows[0]) if rows else None
+        if not rows:
+            return None
+        d = dict(rows[0])
+        d["data"] = json.loads(d["data"]) if d.get("data") else None
+        return d
 
-    def recent(self, limit: int = 20) -> list[dict]:
+    def recent(self, limit: int = 20, offset: int = 0, status: str | None = None) -> list[dict]:
+        where, args = ("WHERE status=?", (status,)) if status else ("", ())
         return [dict(r) for r in self._exec(
-            "SELECT number, status, attempts, last_error, updated_at FROM orders "
-            "ORDER BY updated_at DESC LIMIT ?", (limit,))]
+            "SELECT number, status, attempts, fetch_status, last_error, created_at, updated_at "
+            f"FROM orders {where} ORDER BY updated_at DESC LIMIT ? OFFSET ?",
+            (*args, limit, offset))]
+
+    def total(self, status: str | None = None) -> int:
+        where, args = ("WHERE status=?", (status,)) if status else ("", ())
+        return self._exec(f"SELECT COUNT(*) n FROM orders {where}", args)[0]["n"]
 
     def counts(self) -> dict:
         rows = self._exec("SELECT status, COUNT(*) n FROM orders GROUP BY status")

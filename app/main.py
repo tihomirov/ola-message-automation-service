@@ -1,10 +1,12 @@
-"""Stage 0 smoke-test service.
+"""OLA message service: FastAPI app.
 
-Goal: prove that the Android Linux Terminal VM can
-  1. install and run the Python stack (FastAPI + uvicorn),
-  2. serve a web page reachable from the phone / LAN,
-  3. reach Gmail IMAP/SMTP and the Telegram API,
-  4. keep running in the background (heartbeat gaps reveal pauses/kills).
+  /api/*        JSON API for the backoffice (app/api.py), login required
+  /health       JSON status, no login
+  /status-lite  simple server-rendered status page, no login
+  /*            the Angular backoffice (app/static, built by the GitHub Action)
+
+Background: mail worker (app/worker.py via app/runtime.py) + heartbeat (gaps
+show when Android paused or killed the VM).
 """
 
 from __future__ import annotations
@@ -19,15 +21,16 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse, HTMLResponse
 
+from . import runtime
 from . import worker as worker_mod
 from .config import ConfigError, load_config
 from .settings import load_features
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("ola")
-from fastapi.responses import HTMLResponse
 
 try:
     from zoneinfo import ZoneInfo
@@ -76,29 +79,11 @@ async def lifespan(_: FastAPI):
     _write("START")
     stop = threading.Event()
     threading.Thread(target=_heartbeat_loop, args=(stop,), daemon=True).start()
-    worker = _start_worker()
+    runtime.start_worker()
     yield
     stop.set()
-    if worker:
-        worker.stop()
+    runtime.stop_worker()
     _write("STOP")
-
-
-def _start_worker():
-    """Start the mail worker if config.yaml enables it and is complete."""
-    try:
-        cfg = load_config()
-    except ConfigError as e:
-        worker_mod.STATE.problems = [f"config.yaml: {e}"]
-        log.error("mail worker not started: %s", e)
-        return None
-    worker_mod.STATE.problems = cfg.problems()
-    if worker_mod.STATE.problems:
-        log.warning("mail worker not started: %s", "; ".join(worker_mod.STATE.problems))
-        return None
-    w = worker_mod.Worker(cfg)
-    w.start()
-    return w
 
 
 def _features_safe():
@@ -130,7 +115,7 @@ def worker_status() -> dict:
     return out
 
 
-app = FastAPI(title="OLA message service (smoke test)", lifespan=lifespan)
+app = FastAPI(title="OLA message service", lifespan=lifespan)
 
 
 # ---------------------------------------------------------------- helpers
@@ -239,8 +224,8 @@ def health() -> dict:
     }
 
 
-@app.get("/", response_class=HTMLResponse)
-def index() -> str:
+@app.get("/status-lite", response_class=HTMLResponse)
+def status_lite() -> str:
     now = time.time()
     hb = analyse_heartbeat()
     mem = meminfo()
@@ -327,3 +312,37 @@ def index() -> str:
 <b>restarted</b> = service or VM was killed and started again.</p>
 <table><tr><th>From</th><th>To</th><th>Duration</th><th>Kind</th></tr>{gap_rows}</table>
 </body></html>"""
+
+
+# ---------------------------------------------------------------- backoffice
+from .api import router as api_router  # noqa: E402
+
+app.include_router(api_router)
+
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+
+
+def build_commit() -> str:
+    f = STATIC_DIR / "BUILD_COMMIT"
+    return f.read_text().strip()[:12] if f.exists() else ""
+
+
+@app.get("/{path:path}", include_in_schema=False)
+def spa(path: str):
+    """Angular SPA: real files from app/static, everything else -> index.html.
+    Before the first frontend build, / shows the simple status page."""
+    index_file = STATIC_DIR / "index.html"
+    if path.startswith("api/"):
+        raise HTTPException(404)
+    if not index_file.exists():
+        if path == "":
+            return HTMLResponse(status_lite())
+        raise HTTPException(404)
+    if path:
+        f = (STATIC_DIR / path).resolve()
+        if f.is_file() and f.is_relative_to(STATIC_DIR.resolve()):
+            # hashed bundle files never change -> cache long; others revalidate
+            hashed = "-" in f.stem and f.suffix in (".js", ".css", ".woff2", ".woff")
+            cache = "public, max-age=31536000, immutable" if hashed else "no-cache"
+            return FileResponse(f, headers={"Cache-Control": cache})
+    return FileResponse(index_file, headers={"Cache-Control": "no-cache"})

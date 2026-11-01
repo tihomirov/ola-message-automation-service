@@ -23,7 +23,7 @@ from email.message import EmailMessage
 from email.parser import BytesParser
 from email.utils import parseaddr
 
-from .message import EmailOrder
+from .message import EmailOrder, EmailOrderItem
 
 DEFAULT_SENDERS = ("postman@site-x.pro",)
 
@@ -46,12 +46,7 @@ class NotAnOrderEmail(ValueError):
     """The email is not a (trusted) new-order email. .args[0] says why."""
 
 
-@dataclass
-class EmailItem:
-    name: str
-    price: str
-    qty: int
-    sum: str
+EmailItem = EmailOrderItem  # backwards-compatible name
 
 
 @dataclass
@@ -138,6 +133,7 @@ def parse_order_text(subject: str, body: str) -> tuple[EmailOrder, list[EmailIte
         payment=fields.get("оплата"),
         additions=fields.get("доповнення"),
         comment=fields.get("побажання"),
+        item_details=items,
     )
     return order, items
 
