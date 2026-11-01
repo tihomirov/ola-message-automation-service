@@ -117,8 +117,9 @@ def test_status_endpoint(client, monkeypatch):
 
 def test_spa_fallback(client, tmp_path, monkeypatch):
     from app import main
-    assert "OLA message service" in client.get("/").text  # no build yet -> status page
     static = tmp_path / "static"
+    monkeypatch.setattr(main, "STATIC_DIR", static)
+    assert "OLA message service" in client.get("/").text  # no build yet -> status page
     static.mkdir()
     (static / "index.html").write_text("<app-root></app-root>")
     (static / "main-ABC123.js").write_text("js")

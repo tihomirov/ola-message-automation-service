@@ -62,7 +62,8 @@ _env = SandboxedEnvironment(undefined=StrictUndefined, keep_trailing_newline=Fal
 
 def phone_e164(phone: str | None) -> str | None:
     """'+380 67 123-45-67' / '0671234567' / '380671234567' -> '380671234567'."""
-    d = re.sub(r"\D", "", phone or "")
+    from .message import phone_digits
+    d = phone_digits(phone) or ""
     if not d:
         return None
     if len(d) == 10 and d.startswith("0"):

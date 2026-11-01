@@ -47,9 +47,11 @@ class EmailOrder:
 
 
 def phone_digits(phone: str | None) -> str | None:
+    """Digits of the FIRST phone-like token only ('+380 63 674 11 42 <...>' -> '380636741142')."""
     if not phone:
         return None
-    digits = re.sub(r"\D", "", phone)
+    m = re.search(r"\+?\d[\d\s()\-]{7,}\d", phone)
+    digits = re.sub(r"\D", "", m.group(0) if m else phone)
     return digits or None
 
 

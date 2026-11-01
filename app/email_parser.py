@@ -42,6 +42,28 @@ FIELD_RE = re.compile(
 )
 
 
+# Gmail's plain-text version of a (manually) forwarded email appends link targets:
+#   "+380636741142 <+380%2063%20674%201142>", "x@gmail.com <mailto:x@gmail.com>",
+#   "вул. Пирогівський шлях, 135 <https://www.google.com/maps/search/...>"
+# and then wraps long lines. Both are undone before the fields are read.
+LINK_ANNOTATION_RE = re.compile(
+    r"[ \t]*\n?[ \t]*<(?:https?://|mailto:|tel:|www\.|\+?[\d%(])[^<>\s]*>"
+)
+PHONE_RE = re.compile(r"\+?\d[\d\s()\-]{7,}\d")
+
+
+def clean_phone(value: str | None) -> str | None:
+    """First phone-like token: '+380636741142 <+380%2063...>' -> '+380636741142'."""
+    if not value:
+        return None
+    m = PHONE_RE.search(value)
+    if not m:
+        return None
+    raw = m.group(0)
+    digits = re.sub(r"\D", "", raw)
+    return ("+" if raw.startswith("+") else "") + digits
+
+
 class NotAnOrderEmail(ValueError):
     """The email is not a (trusted) new-order email. .args[0] says why."""
 
@@ -103,16 +125,29 @@ def parse_order_text(subject: str, body: str) -> tuple[EmailOrder, list[EmailIte
     greeting = GREETING_RE.search(body)
     name = _squash(greeting.group("name")) if greeting else ""
 
+    body = LINK_ANNOTATION_RE.sub("", body)
     fields: dict[str, str | None] = {}
     items: list[EmailItem] = []
+    open_field: str | None = None  # field whose value may continue on the next line
     for line in (ln.strip() for ln in body.split("\n")):
         if not line:
+            open_field = None  # a blank line ends a wrapped value
             continue
         f = FIELD_RE.match(line)
         if f:
-            fields.setdefault(f.group("key").lower(), _value(f.group("value")))
+            key = f.group("key").lower()
+            if key not in fields:
+                fields[key] = _value(f.group("value"))
+                open_field = key
+            else:
+                open_field = None
             continue
         it = ITEM_RE.match(line)
+        if not it and open_field and not line.startswith("©"):
+            # a long line wrapped by the mail client: join it back
+            fields[open_field] = _value(f"{fields[open_field] or ''} {line}")
+            continue
+        open_field = None
         if it:
             items.append(EmailItem(
                 name=_squash(it.group("name")),
@@ -124,10 +159,10 @@ def parse_order_text(subject: str, body: str) -> tuple[EmailOrder, list[EmailIte
     order = EmailOrder(
         number=number,
         customer_name=name,
-        phone=fields.get("телефон"),
+        phone=clean_phone(fields.get("телефон")),
         items=[f"{i.name} ({i.price} x {i.qty})" for i in items],
         total=fields.get("всього") or subject_sum,
-        customer_email=fields.get("e-mail"),
+        customer_email=(fields.get("e-mail") or "").split()[0] if fields.get("e-mail") else None,
         delivery=fields.get("доставка"),
         address=fields.get("адреса"),
         payment=fields.get("оплата"),

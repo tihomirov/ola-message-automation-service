@@ -86,3 +86,50 @@ def test_flow1_message_from_email():
     assert "🚚 Самовивіз з «Нова Пошта»" in text and "💳 Накладений платіж" in text
     assert "https://wa.me/380670000000" in text
     assert "розмір" not in text
+
+
+# Plain text as Gmail produces it for a manually forwarded order (real case, CB01E):
+# link targets appended in <...>, and the long address line wrapped.
+GMAIL_FWD_BODY = (
+    "Вітаємо, Антон Тестовий, дякуємо за оформлення замовлення №CB01E.\n\n"
+    "Сукні, SALE Сатинова сукня з відкритими плечима   (2 450 ₴ x 1) = 2 450 ₴\n\n\n"
+    "Доставка: Самовивіз з «Нова Пошта» (за тарифами перевізника)\n"
+    "Адреса: Київ, Відділення №1: вул. Пирогівський шлях,\n"
+    "135 <https://www.google.com/maps/search/%D0%B2%D1%83%D0%BB.+135?entry=gmail&source=g>\n"
+    "Оплата: Накладений платіж (оплата при отриманні)\n"
+    "Доповнення: -\n\n"
+    "Всього: 2 450 ₴\n\n"
+    "Телефон: +380636741142 <+380%2063%20674%201142>\n"
+    "E-mail: customer@example.com <mailto:customer@example.com>\n"
+    "Побажання: -\n\n"
+    "© For Real, 31.10.2026\n"
+)
+
+
+def test_gmail_link_annotations_and_wrapped_lines():
+    order, items = parse_order_text("Замовлення на сайті №CB01E на суму 2 450 ₴", GMAIL_FWD_BODY)
+    assert order.phone == "+380636741142"
+    assert order.customer_email == "customer@example.com"
+    assert order.address == "Київ, Відділення №1: вул. Пирогівський шлях, 135"
+    assert order.comment is None  # "-" plus the footer after a blank line is not joined
+    assert items[0].name == "Сукні, SALE Сатинова сукня з відкритими плечима"
+    text = build_message(order)
+    assert "📞 +380636741142\n" in text
+    assert "https://wa.me/380636741142 " not in text  # sanity: no trailing junk...
+    assert text.endswith("WhatsApp: https://wa.me/380636741142")
+    assert "t.me/+380636741142 |" in text and "%2B380636741142 |" in text
+
+
+def test_annotation_on_same_line_and_spaced_phone():
+    body = ("Вітаємо, А Б, дякуємо\nАдреса: Київ, вул. Хрещатик, 1 <https://maps.google.com/?q=1>\n"
+            "Телефон: +38 (063) 674-11-42 <tel:+380636741142>\n")
+    order, _ = parse_order_text("Замовлення на сайті №A1 на суму 1 ₴", body)
+    assert order.address == "Київ, вул. Хрещатик, 1"
+    assert order.phone == "+380636741142"
+
+
+def test_phone_digits_ignores_trailing_junk():
+    from app.message import phone_digits
+    from app.render import phone_e164
+    assert phone_digits("+380636741142 <+380%2063%20674%201142>") == "380636741142"
+    assert phone_e164("+380636741142 <+380%2063%20674%201142>") == "380636741142"
