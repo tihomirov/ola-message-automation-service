@@ -119,7 +119,17 @@ To process one poll by hand (sends for real and adds labels): `.venv/bin/python 
 
 - **Passwords** are never sent back to the browser: they show as `••••••`. Leave them as is to keep them, or type a new one.
 - **Login:** one admin password. Set or reset it with `.venv/bin/python -m app.cli set-password`, which also logs out every session. The session lasts 7 days (`admin.session_hours`).
-- **Message template:** empty means the built-in message. **Load default** gives an editable template with the same layout. If a saved template breaks at runtime, the built-in message is sent instead, so no order is lost.
+- **Message template:** empty means the **default template**:
+  - a greeting with the customer's first name;
+  - a text for the customer in a highlighted box, which depends on the payment type:
+    - **cash on delivery** (накладений платіж): "Просимо підтвердити ваше замовлення…";
+    - **card** (Visa/Mastercard/Apple Pay/Google Pay): "Ваше замовлення … отримане… Відправка буде сьогодні";
+  - the items with size and colour (`SIZE`/`COLOR` placeholders in flow 1, real values in flow 2);
+  - the chat links.
+
+  **Load default** puts an editable copy (and the default subject) into the editor.
+- **Customer text box:** lines between `[[quote]]` and `[[/quote]]` are shown as a box in the email, with a **Copy** button in the backoffice preview and on the Orders page. Email apps don't run scripts, so the email itself can't have a copy button.
+- **Template errors:** if a saved template breaks at runtime, the built-in message is sent instead, so no order is lost.
 
 ### Releasing the backoffice
 
@@ -146,10 +156,10 @@ If a change touches both the API and the UI, release the frontend before updatin
 | `mailbox.*_label` | `ola-processed / ola-ignored / ola-failed` | Gmail labels the service adds |
 | `mailbox.max_attempts` | `5` | Send attempts before `ola-failed` |
 | `email.to` | — | Notification recipients |
-| `email.subject` | `🛍 Нове замовлення №{number} — {customer_name}` | Also `{phone}`, `{total}`, `{delivery}`, `{payment}` |
+| `email.subject` | `[OLA.SERVICE] Нове замовлення №{number} — {customer_name}` | Also `{phone}`, `{total}`, `{delivery}`, `{payment}` |
 | `email.smtp_port` | `587` | `587` = STARTTLS, `465` = SSL |
 | `storage.max_size_mb` / `retention_days` | `50` / `180` | DB size cap: older rows are deleted first |
-| `template.text` | empty | Jinja message template; empty = built-in message |
+| `template.text` | empty | Jinja message template; empty = the default template |
 | `template.links` | Telegram, Viber, WhatsApp | Links library (URL templates) |
 | `admin.*` | — | Set by `app.cli set-password`; not editable in the backoffice |
 

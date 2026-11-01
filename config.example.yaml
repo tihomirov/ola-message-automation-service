@@ -34,7 +34,7 @@ email:                         # notification channel
   from_name: "OLA замовлення"
   to:
     - you@example.com
-  subject: "🛍 Нове замовлення №{number} — {customer_name}"
+  subject: "[OLA.SERVICE] Нове замовлення №{number} — {customer_name}"
   # subject placeholders: {number} {customer_name} {phone} {total} {delivery} {payment}
 
 shop:                          # only used when features.fetch_order_details is true
@@ -42,6 +42,10 @@ shop:                          # only used when features.fetch_order_details is 
   login_email: ""
   login_password: ""
   cookie: ""                   # fallback: Cookie header copied from DevTools
+
+template:
+  text: ""                     # empty = the default template (see the Message page)
+  # links: URL templates, default Telegram / Viber / WhatsApp
 
 storage:
   db_path: data/ola.db

@@ -19,12 +19,12 @@ protected = APIRouter(dependencies=[Depends(require_admin)])
 
 SAMPLE_ORDER = EmailOrder(
     number="CD109", customer_name="Олена Тестова", phone="+380670000000",
-    items=["Сукні Шовковиста нічна сорочка зі шнурівкою (1 990 ₴ x 1)"], total="1 990 ₴",
+    items=["Сукні, SALE Сатинова сукня з відкритими плечима (2 450 ₴ x 1)"], total="2 450 ₴",
     customer_email="customer@example.com",
     delivery="Самовивіз з «Нова Пошта» (за тарифами перевізника)",
     address="Київ, Відділення №1 (до 10 кг): вул. Тестова, 1",
     payment="Накладений платіж (оплата при отриманні)",
-    item_details=[EmailOrderItem("Сукні Шовковиста нічна сорочка зі шнурівкою", "1 990 ₴", 1, "1 990 ₴")],
+    item_details=[EmailOrderItem("Сукні, SALE Сатинова сукня з відкритими плечима", "2 450 ₴", 1, "2 450 ₴")],
 )
 
 
@@ -240,17 +240,16 @@ class PreviewIn(BaseModel):
 
 @protected.get("/template/default")
 def template_default() -> dict:
-    from .render import DEFAULT_TEMPLATE, VARIABLES_HELP
-    return {"text": DEFAULT_TEMPLATE, "variables": VARIABLES_HELP}
+    from .render import DEFAULT_SUBJECT, DEFAULT_TEMPLATE, VARIABLES_HELP
+    return {"text": DEFAULT_TEMPLATE, "subject": DEFAULT_SUBJECT, "variables": VARIABLES_HELP}
 
 
 @protected.post("/template/preview")
 def template_preview(body: PreviewIn) -> dict:
     from jinja2 import TemplateError
 
-    from .mailer import render_subject
-    from .message import build_message
-    from .render import build_context, render_template
+    from .mailer import render_subject, text_to_html
+    from .render import DEFAULT_TEMPLATE, build_context, render_template
 
     cfg = _cfg()
     order_ = SAMPLE_ORDER
@@ -269,11 +268,10 @@ def template_preview(body: PreviewIn) -> dict:
     subject = render_subject(body.subject if body.subject is not None else cfg.email.subject,
                              vars(order_))
     try:
-        if body.text.strip():
-            text = render_template(body.text, build_context(order_, links=links))
-        else:
-            text = build_message(order_)
-        return {"text": text, "subject": subject, "error": None, "source": source}
+        text = render_template(body.text.strip() or DEFAULT_TEMPLATE,
+                               build_context(order_, links=links))
+        return {"text": text, "html": text_to_html(text), "subject": subject,
+                "error": None, "source": source}
     except TemplateError as e:
         line = getattr(e, "lineno", None)
         return {"text": "", "subject": subject, "source": source,

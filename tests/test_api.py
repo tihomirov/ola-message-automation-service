@@ -93,13 +93,16 @@ def test_orders_and_template_preview(client, cfg_path):
     default = client.get("/api/template/default").json()
     p = client.post("/api/template/preview", json={"text": default["text"], "number": "A1"}).json()
     assert p["error"] is None and p["source"] == "order A1"
-    assert "👤 Ірина" in p["text"] and "• Піжама" in p["text"]
+    assert p["text"].startswith("Ірина, вітаємо") and "\n піжама\n" in p["text"]
+    assert "border-left" in p["html"]
     assert "https://wa.me/380671112233" in p["text"]  # 0XX normalised to 380...
 
     bad = client.post("/api/template/preview", json={"text": "{{ order.nope }}"}).json()
     assert bad["error"] and "nope" in bad["error"]
     sample = client.post("/api/template/preview", json={"text": ""}).json()
-    assert "🛍 Нове замовлення №CD109" in sample["text"]
+    assert sample["text"] == client.post("/api/template/preview", json={"text": default["text"]}).json()["text"]
+    assert sample["subject"] == "[OLA.SERVICE] Нове замовлення №CD109 — Олена Тестова"
+    assert default["subject"].startswith("[OLA.SERVICE]")
 
 
 def test_shop_test_hidden_in_flow1(client):

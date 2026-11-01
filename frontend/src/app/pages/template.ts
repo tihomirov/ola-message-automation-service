@@ -11,10 +11,11 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { Subject, debounceTime } from 'rxjs';
 import { Api, LinkCfg, Preview, errorText } from '../api';
+import { MessageView } from '../message-view';
 
 @Component({
   selector: 'app-template',
-  imports: [FormsModule, KeyValuePipe, MatCardModule, MatFormFieldModule, MatInputModule, MatButtonModule, MatIconModule, MatExpansionModule, MatSnackBarModule],
+  imports: [FormsModule, KeyValuePipe, MessageView, MatCardModule, MatFormFieldModule, MatInputModule, MatButtonModule, MatIconModule, MatExpansionModule, MatSnackBarModule],
   template: `
     <h2>Message</h2>
     @if (error()) { <p class="error">{{ error() }}</p> }
@@ -32,10 +33,12 @@ import { Api, LinkCfg, Preview, errorText } from '../api';
               <strong>Message template</strong>
               <span class="spacer"></span>
               <button mat-button (click)="loadDefault()">Load default</button>
-              <button mat-button (click)="text = ''; changed()" [disabled]="!text">Use built-in</button>
+              <button mat-button (click)="text = ''; changed()" [disabled]="!text">Reset to default</button>
             </div>
             @if (!text) {
-              <p class="hint">Empty = the built-in message. Click <b>Load default</b> to start editing from a template.</p>
+              <p class="hint">Empty = the <b>default template</b> is used (see the preview). Click <b>Load default</b> to edit a copy of it.</p>
+            } @else {
+              <p class="hint">Lines between <code>[[quote]]</code> and <code>[[/quote]]</code> are the text for the customer: a box in the email, a Copy button here and on the Orders page.</p>
             }
             <mat-form-field appearance="outline" class="full">
               <textarea matInput class="code" rows="18" [(ngModel)]="text" (input)="changed()" spellcheck="false"
@@ -84,7 +87,7 @@ import { Api, LinkCfg, Preview, errorText } from '../api';
               <p class="hint">Data: {{ p.source }}</p>
               <div class="subject">{{ p.subject }}</div>
               @if (p.error) { <pre class="perr">{{ p.error }}</pre> }
-              @else { <pre>{{ p.text }}</pre> }
+              @else { <div class="mail"><app-message-view [text]="p.text" /></div> }
             }
           </mat-card-content>
         </mat-card>
@@ -105,6 +108,7 @@ import { Api, LinkCfg, Preview, errorText } from '../api';
     td { padding: 4px 8px 4px 0; vertical-align: top; }
     .hint { color: var(--mat-sys-on-surface-variant); font-size: 13px; }
     .subject { font-weight: 500; margin-bottom: 8px; }
+    .mail { background: var(--mat-sys-surface); border: 1px solid var(--mat-sys-outline-variant); border-radius: 6px; padding: 8px 12px; }
     pre { white-space: pre-wrap; word-break: break-word; background: var(--mat-sys-surface-container); padding: 12px; border-radius: 6px; margin: 0; }
     .perr { background: var(--mat-sys-error-container); color: var(--mat-sys-on-error-container); }
     .actions { display: flex; gap: 12px; align-items: center; padding: 12px 0; }
@@ -159,7 +163,9 @@ export class TemplatePage {
   }
 
   async loadDefault() {
-    this.text = (await this.api.templateDefault()).text;
+    const d = await this.api.templateDefault();
+    this.text = d.text;
+    this.subject = d.subject;
     this.changed();
   }
 

@@ -8,10 +8,11 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatSelectModule } from '@angular/material/select';
 import { Api, OrderDetail, OrderRow, errorText } from '../api';
+import { MessageView } from '../message-view';
 
 @Component({
   selector: 'app-orders',
-  imports: [DatePipe, JsonPipe, FormsModule, MatExpansionModule, MatSelectModule, MatFormFieldModule, MatPaginatorModule, MatButtonModule, MatIconModule],
+  imports: [DatePipe, JsonPipe, FormsModule, MessageView, MatExpansionModule, MatSelectModule, MatFormFieldModule, MatPaginatorModule, MatButtonModule, MatIconModule],
   template: `
     <div class="head">
       <h2>Orders</h2>
@@ -44,7 +45,7 @@ import { Api, OrderDetail, OrderRow, errorText } from '../api';
           @if (details()[o.number]; as d) {
             @if (d.message) {
               <h4>Sent message</h4>
-              <pre>{{ d.message }}</pre>
+              <app-message-view [text]="d.message" />
             }
             @if (d.fetch_status) { <p>Shop fetch: {{ d.fetch_status }}</p> }
             @if (d.data) {

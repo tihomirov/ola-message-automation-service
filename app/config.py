@@ -55,7 +55,7 @@ class EmailChannelConfig:
     password: str = ""  # empty = mailbox.password
     from_name: str = "OLA замовлення"
     to: list[str] = field(default_factory=list)
-    subject: str = "🛍 Нове замовлення №{number} — {customer_name}"
+    subject: str = "[OLA.SERVICE] Нове замовлення №{number} — {customer_name}"
 
 
 @dataclass

@@ -65,8 +65,8 @@ def test_sends_order_and_labels_processed(cfg, store):
     res = process_once(cfg, mb, mailer, store)
     assert (res.found, res.sent) == (1, 1)
     subject, text = mailer.sent[0]
-    assert subject == "🛍 Нове замовлення №CD109 — Олена Тестова"
-    assert "• Сукні Шовковиста нічна сорочка" in text and "🚚" in text
+    assert subject == "[OLA.SERVICE] Нове замовлення №CD109 — Олена Тестова"
+    assert text.startswith("Олена, вітаємо") and "\n шовковиста нічна сорочка зі шнурівкою\n" in text
     assert mb.labels[b"1"] == {"ola-processed"}
     assert store.is_sent("CD109")
     senders, exclude, days = mb.searches[0]

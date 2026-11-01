@@ -113,6 +113,7 @@ export interface Status {
 
 export interface Preview {
   text: string;
+  html?: string;
   subject: string;
   error: string | null;
   source: string;
@@ -198,7 +199,7 @@ export class Api {
   }
   templateDefault() {
     return firstValueFrom(
-      this.http.get<{ text: string; variables: Record<string, string> }>('/api/template/default'),
+      this.http.get<{ text: string; subject: string; variables: Record<string, string> }>('/api/template/default'),
     );
   }
   preview(body: { text: string; subject?: string; links?: LinkCfg[]; number?: string }) {
