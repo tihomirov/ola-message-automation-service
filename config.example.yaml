@@ -1,0 +1,49 @@
+# OLA message service configuration.
+#   cp config.example.yaml config.yaml && chmod 600 config.yaml && nano config.yaml
+# config.yaml is git-ignored: it contains passwords. Restart after changes:
+#   sudo systemctl restart ola-service
+
+features:
+  # false = flow 1: message from the order email only
+  # true  = flow 2: also fetch order details (sizes) from the shop admin (needs `shop:`)
+  fetch_order_details: false
+
+mailbox:                       # the Gmail account that receives the order emails
+  enabled: true
+  host: imap.gmail.com
+  port: 993
+  username: your-bot-account@gmail.com
+  password: "xxxx xxxx xxxx xxxx"   # Gmail app password (Google account → Security → App passwords)
+  folder: INBOX
+  poll_interval_seconds: 60    # how often to check (min 15)
+  lookback_days: 2             # ignore emails older than this (also the catch-up window after downtime)
+  allowed_senders:
+    - postman@site-x.pro
+  allowed_forwarders: []       # accept manual "Fwd:" from these addresses, e.g. - owner@gmail.com
+  processed_label: ola-processed
+  ignored_label: ola-ignored
+  failed_label: ola-failed
+  max_attempts: 5              # send attempts before the email gets the failed label
+
+email:                         # notification channel
+  enabled: true
+  smtp_host: smtp.gmail.com
+  smtp_port: 587               # 587 = STARTTLS, 465 = SSL
+  username: ""                 # empty = same as mailbox.username
+  password: ""                 # empty = same as mailbox.password
+  from_name: "OLA замовлення"
+  to:
+    - you@example.com
+  subject: "🛍 Нове замовлення №{number} — {customer_name}"
+  # subject placeholders: {number} {customer_name} {phone} {total} {delivery} {payment}
+
+shop:                          # only used when features.fetch_order_details is true
+  base_url: https://forreal-wear.com/eco/ukr/shop
+  login_email: ""
+  login_password: ""
+  cookie: ""                   # fallback: Cookie header copied from DevTools
+
+storage:
+  db_path: data/ola.db
+  max_size_mb: 50
+  retention_days: 180

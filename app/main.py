@@ -10,6 +10,7 @@ Goal: prove that the Android Linux Terminal VM can
 from __future__ import annotations
 
 import html
+import logging
 import os
 import socket
 import threading
@@ -20,7 +21,12 @@ from pathlib import Path
 
 from fastapi import FastAPI
 
+from . import worker as worker_mod
+from .config import ConfigError, load_config
 from .settings import load_features
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+log = logging.getLogger("ola")
 from fastapi.responses import HTMLResponse
 
 try:
@@ -70,9 +76,58 @@ async def lifespan(_: FastAPI):
     _write("START")
     stop = threading.Event()
     threading.Thread(target=_heartbeat_loop, args=(stop,), daemon=True).start()
+    worker = _start_worker()
     yield
     stop.set()
+    if worker:
+        worker.stop()
     _write("STOP")
+
+
+def _start_worker():
+    """Start the mail worker if config.yaml enables it and is complete."""
+    try:
+        cfg = load_config()
+    except ConfigError as e:
+        worker_mod.STATE.problems = [f"config.yaml: {e}"]
+        log.error("mail worker not started: %s", e)
+        return None
+    worker_mod.STATE.problems = cfg.problems()
+    if worker_mod.STATE.problems:
+        log.warning("mail worker not started: %s", "; ".join(worker_mod.STATE.problems))
+        return None
+    w = worker_mod.Worker(cfg)
+    w.start()
+    return w
+
+
+def _features_safe():
+    try:
+        return load_features()
+    except ConfigError:
+        return None
+
+
+def worker_status() -> dict:
+    st = worker_mod.STATE
+    r = st.last_result
+    out = {
+        "running": st.running,
+        "problems": st.problems,
+        "last_poll": fmt_ts(st.last_poll_at) if st.last_poll_at else None,
+        "last_ok": fmt_ts(st.last_ok_at) if st.last_ok_at else None,
+        "last_error": st.last_error,
+        "last_result": None if r is None else {
+            k: getattr(r, k) for k in ("found", "sent", "duplicates", "ignored", "retry", "failed")},
+    }
+    try:
+        from .store import Store
+        store = Store(load_config().db_file())
+        out["db_size_kb"] = store.size_bytes() // 1024
+        out["orders"] = store.counts()
+    except Exception as e:
+        out["db_error"] = str(e)
+    return out
 
 
 app = FastAPI(title="OLA message service (smoke test)", lifespan=lifespan)
@@ -171,13 +226,15 @@ def check_network() -> list[dict]:
 @app.get("/health")
 def health() -> dict:
     hb = analyse_heartbeat()
+    f = _features_safe()
     return {
         "status": "ok",
         "now": fmt_ts(time.time()),
         "process_uptime_s": int(time.time() - PROCESS_STARTED),
         "vm_uptime_s": int(vm_uptime()),
         "memory_mib": meminfo(),
-        "features": {"fetch_order_details": load_features().fetch_order_details},
+        "features": {"fetch_order_details": bool(f and f.fetch_order_details)},
+        "worker": worker_status(),
         "heartbeat": {**hb, "gaps": hb["gaps"][-20:]},
     }
 
@@ -201,8 +258,24 @@ def index() -> str:
         for g in reversed(hb["gaps"][-50:])
     ) or "<tr><td colspan='4'>No gaps yet 🎉</td></tr>"
 
-    mode = ("email + order details from the shop" if load_features().fetch_order_details
+    f = _features_safe()
+    mode = ("config.yaml is invalid" if f is None else
+            "email + order details from the shop" if f.fetch_order_details
             else "email only (order details fetch: off)")
+    ws = worker_status()
+    lr = ws["last_result"]
+    if ws["running"]:
+        w_state = "<span class='ok'>running</span>"
+    else:
+        w_state = "<span class='bad'>not running</span>: " + html.escape("; ".join(ws["problems"]))
+    worker_rows = (
+        f"<tr><td>Mail worker</td><td>{w_state}</td></tr>"
+        f"<tr><td>Last poll / last OK</td><td>{ws['last_poll'] or '—'} / {ws['last_ok'] or '—'}</td></tr>"
+        f"<tr><td>Last result</td><td>{html.escape(str(lr)) if lr else '—'}</td></tr>"
+        f"<tr><td>Last error</td><td class='bad'>{html.escape(ws['last_error'])}</td></tr>"
+        f"<tr><td>Orders in DB</td><td>{html.escape(str(ws.get('orders', '—')))}</td></tr>"
+        f"<tr><td>DB size</td><td>{ws.get('db_size_kb', '?')} KB</td></tr>"
+    )
     first = fmt_ts(hb["first"]) if hb["first"] else "—"
     last = fmt_ts(hb["last"]) if hb["last"] else "—"
 
@@ -234,6 +307,9 @@ def index() -> str:
 <tr><td>This process RSS</td><td>{mem.get('ProcessRSS', '?')} MiB</td></tr>
 <tr><td>Mode</td><td>{mode}</td></tr>
 </table>
+
+<h2>Mail worker</h2>
+<table>{worker_rows}</table>
 
 <h2>Network (checked on page load)</h2>
 <table><tr><th>Target</th><th>Status</th><th>Time</th><th>Error</th></tr>{net_rows}</table>

@@ -1,19 +1,17 @@
-"""Feature flags.
-
-For now they come from environment variables (set in the systemd unit).
-In P1 they move to config.yaml and become toggles in the backoffice.
-"""
+"""Feature flags: config.yaml (features.*), overridable by environment variables."""
 
 from __future__ import annotations
 
 import os
 from dataclasses import dataclass
 
+from .config import AppConfig, load_config
 
-def _env_bool(name: str, default: bool = False) -> bool:
+
+def _env_bool(name: str) -> bool | None:
     value = os.environ.get(name)
-    if value is None:
-        return default
+    if value is None or not value.strip():
+        return None
     return value.strip().lower() in ("1", "true", "yes", "on")
 
 
@@ -26,5 +24,9 @@ class Features:
     fetch_order_details: bool = False
 
 
-def load_features() -> Features:
-    return Features(fetch_order_details=_env_bool("OLA_FETCH_ORDER_DETAILS", False))
+def load_features(cfg: AppConfig | None = None) -> Features:
+    cfg = cfg or load_config()
+    env = _env_bool("OLA_FETCH_ORDER_DETAILS")
+    return Features(
+        fetch_order_details=cfg.features.fetch_order_details if env is None else env
+    )

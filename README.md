@@ -1,45 +1,117 @@
 # OLA message service
 
-Watches a Gmail inbox for the shop's "new order" emails, builds a notification (customer, items, total, delivery, chat links), and sends it by Telegram and/or email. Optionally (flow 2) it also fetches order details such as sizes from the shop admin.
-
-### Status
+Watches a Gmail inbox for the shop's "new order" emails, builds a notification (customer, items, total, delivery, address, payment, chat links) and sends it **by email**. Optionally (flow 2) it also fetches order details such as sizes from the shop admin.
 
 | Part | State |
 |---|---|
-| Status page (`/`) and `/health` | ✅ works |
-| Order email parser + message preview (flow 1) | ✅ works, by CLI |
-| Shop login, order lookup and details (flow 2) | ✅ works, by CLI. Off by default |
-| Gmail polling, sending to Telegram/email | ⏳ next step |
+| Gmail polling (configurable) | ✅ |
+| Email notifications | ✅ |
+| Order email parser (direct, auto-forwarded, manual "Fwd:") | ✅ |
+| History and dedupe (SQLite, size-capped) | ✅ |
+| Status page (`/`) and `/health` | ✅ |
+| Flow 2: shop login, order lookup and sizes | ✅ off by default |
 | Backoffice (Angular) | ⏳ planned |
+
+## How it works
+
+Every `poll_interval_seconds` (default 60), the service:
+
+1. Searches the mailbox for emails from `allowed_senders` (and `allowed_forwarders`), newer than `lookback_days`, that don't have an `ola-*` label yet.
+2. For each email, oldest first:
+   - **Not an order email** → label `ola-ignored`.
+   - **Order already notified** (same order number) → label `ola-processed`, nothing is sent.
+   - **New order** → builds the message → sends it to `email.to` → label `ola-processed`.
+   - **Send failed** → tries again on the next poll. After `max_attempts` failures → label `ola-failed`.
+
+Emails are never deleted or marked as read. If the server was off, the next poll picks up everything from the last `lookback_days`.
+
+The order email contains **no sizes**. Flow 1 (default) shows items as the email lists them. Flow 2 adds sizes from the shop admin.
 
 ## Install (Debian / Android Linux Terminal)
 
 ```bash
 sudo apt update && sudo apt install -y git python3-venv curl
-git clone <REPO_URL> ola-message-service
+git clone https://github.com/tihomirov/ola-message-automation-service.git ola-message-service
 cd ola-message-service
-bash scripts/install.sh          # default port 8080
+bash scripts/install.sh          # default port 8080; creates config.yaml (disabled)
 ```
 
-Open `http://localhost:8080` in the phone's browser. If the Terminal app asks to allow port forwarding for 8080, allow it.
+Open `http://localhost:8080` in the phone's browser. If the Terminal app asks to allow port forwarding for 8080, allow it. Until you configure it, the status page shows **Mail worker: not running** and the reason.
 
-## How to use (current stage)
+## Setup
 
-All commands run from the project folder on the server (`cd ola-message-service`).
+### 1. Gmail account for the bot
 
-### 1. Check the service is running
+1. Create a Gmail account for the bot, or use a spare one. Don't use your personal account: the app password opens the whole mailbox.
+2. Turn on **2-Step Verification** in that account (Google Account → Security).
+3. Create an **app password**: Google Account → Security → App passwords (or search "App passwords"). Copy the 16 characters.
+4. IMAP is on by default for Gmail.
+
+### 2. Get the order emails into that account
+
+Pick one:
+
+- **Best:** in the shop admin's notification settings, add the bot address as an extra recipient.
+- **Or:** in the Gmail that receives the orders now, go to Settings → Forwarding → Add a forwarding address (the bot address). Gmail sends a confirmation code to the bot mailbox; confirm it. Then create a filter: `from:postman@site-x.pro` → **Forward to** the bot address.
+
+Both keep the original sender, so nothing else is needed. If you sometimes forward an order by hand ("Fwd:"), add your address to `mailbox.allowed_forwarders`.
+
+### 3. Fill in config.yaml
 
 ```bash
-sudo systemctl status ola-service
-curl -s localhost:8080/health
+nano config.yaml        # created by install.sh; config.example.yaml has every option with comments
 ```
 
-Or open `http://localhost:8080` on the phone. The page shows memory, network checks, heartbeat gaps and the current **Mode** (flow 1 or 2).
+Minimum to change:
 
-### 2. Preview the message for an order email
+```yaml
+mailbox:
+  enabled: true
+  username: bot-account@gmail.com
+  password: "abcd efgh ijkl mnop"    # the app password
+email:
+  enabled: true
+  to:
+    - you@example.com                # where notifications go (several allowed)
+```
+
+The email channel sends from the bot account with the same app password, unless you set `email.username`/`email.password`.
+
+### 4. Test, then start
+
+```bash
+.venv/bin/python -m app.worker --test-email          # sends a test email to email.to
+.venv/bin/python -m app.worker --once --dry-run      # reads the mailbox, prints the messages it WOULD send
+sudo systemctl restart ola-service                   # start polling
+sudo journalctl -u ola-service -f                    # watch it work
+```
+
+The dry run doesn't send anything or add labels. The status page shows the last poll, the result counts, errors and the DB size.
+
+To process one poll by hand (sends for real and adds labels): `.venv/bin/python -m app.worker --once`.
+
+## Configuration reference
+
+`config.yaml` (git-ignored, `chmod 600`; restart after changes):
+
+| Key | Default | Meaning |
+|---|---|---|
+| `features.fetch_order_details` | `false` | `true` = flow 2 (needs `shop:`). The env var `OLA_FETCH_ORDER_DETAILS` overrides it. |
+| `mailbox.poll_interval_seconds` | `60` | How often to check the mailbox (min 15) |
+| `mailbox.lookback_days` | `2` | Ignore older emails. Also the catch-up window after downtime |
+| `mailbox.allowed_senders` | `[postman@site-x.pro]` | Only emails from these count as orders |
+| `mailbox.allowed_forwarders` | `[]` | Accept manual "Fwd:" from these addresses |
+| `mailbox.*_label` | `ola-processed / ola-ignored / ola-failed` | Gmail labels the service adds |
+| `mailbox.max_attempts` | `5` | Send attempts before `ola-failed` |
+| `email.to` | — | Notification recipients |
+| `email.subject` | `🛍 Нове замовлення №{number} — {customer_name}` | Also `{phone}`, `{total}`, `{delivery}`, `{payment}` |
+| `email.smtp_port` | `587` | `587` = STARTTLS, `465` = SSL |
+| `storage.max_size_mb` / `retention_days` | `50` / `180` | DB size cap: older rows are deleted first |
+
+## Preview the message for a single email
 
 1. In Gmail, open an order email → **⋮** → **Download message**. This gives you an `.eml` file.
-2. Copy it to the server into `samples/`. That folder is git-ignored, because real emails contain customer data.
+2. Copy it to `samples/` on the server. That folder is git-ignored, because real emails contain customer data.
 3. Run:
 
 ```bash
@@ -47,15 +119,7 @@ Or open `http://localhost:8080` on the phone. The page shows memory, network che
 .venv/bin/python -m app.email_parser samples/order.eml --json    # + parsed fields
 ```
 
-It accepts the email as the shop sends it (from `postman@site-x.pro`), a Gmail auto-forward, and a manual "Fwd:". Anything else is rejected with `Not an order email: <reason>`.
-
-The order email contains **no sizes**. In flow 1, items are shown as the email lists them. For sizes, use flow 2.
-
-### 3. (Flow 2 only) Check the shop access
-
-See [Check the shop access](#check-the-shop-access-order-lookup--details) below.
-
-### 4. Update to the latest version
+## Update
 
 ```bash
 git pull
@@ -63,30 +127,15 @@ git pull
 sudo systemctl restart ola-service
 ```
 
-## Flows (toggle)
-
-| `OLA_FETCH_ORDER_DETAILS` | Flow |
-|---|---|
-| `false` (default) | **Flow 1:** order email → message + links. The shop admin is never contacted. |
-| `true` | **Flow 2:** order email → find the order on the shop by its number → order details (sizes) → message + links. |
-
-To switch, edit the unit and restart:
-
-```bash
-sudo systemctl edit ola-service     # add: [Service]  Environment=OLA_FETCH_ORDER_DETAILS=true
-sudo systemctl restart ola-service
-curl -s localhost:8080/health | grep -o '"features":{[^}]*}'
-```
-
-The status page shows the current mode. The section below is only needed for flow 2.
-
-## Check the shop access (order lookup + details)
+## Flow 2: check the shop access (order lookup + details)
 
 The shop admin has no API. The service replays the admin's own requests:
 
 - `POST /eco/ukr/main/signin`: log in with email and password (gets the session cookie)
 - `POST /eco/ukr/shop/orders/getjson`: find an order by its number from the email (e.g. `CB01E`)
 - `POST /eco/ukr/shop/orders/getorderjson`: full order (items, sizes, phone)
+
+To turn flow 2 on, set `features.fetch_order_details: true` and fill in `shop:` in `config.yaml`. Before that, check access by hand:
 
 **Main way: auto-login.** The service logs in by itself and logs in again when the session expires. At most one attempt per minute, so a wrong password never loops.
 
@@ -117,9 +166,10 @@ export OLA_SHOP_EMAIL='you@example.com'
 
 ```bash
 sudo systemctl status ola-service       # is it running?
+.venv/bin/python -m app.worker --test-email   # check the email channel
 sudo journalctl -u ola-service -f       # live logs
 sudo systemctl restart ola-service      # restart
-git pull && sudo systemctl restart ola-service   # update
+.venv/bin/python -m app.worker --once --dry-run   # what the next poll would send
 curl -s localhost:8080/health           # JSON status
 ```
 

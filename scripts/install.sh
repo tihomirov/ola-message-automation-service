@@ -14,6 +14,13 @@ python3 -m venv "$DIR/.venv"
 "$DIR/.venv/bin/pip" install --upgrade pip -q
 "$DIR/.venv/bin/pip" install -r "$DIR/requirements.txt" -q
 
+if [ ! -f "$DIR/config.yaml" ]; then
+  echo ">> Creating config.yaml from config.example.yaml (edit it, then restart)"
+  cp "$DIR/config.example.yaml" "$DIR/config.yaml"
+  sed -i 's/^  enabled: true/  enabled: false/' "$DIR/config.yaml"
+fi
+chmod 600 "$DIR/config.yaml"
+
 echo ">> Installing systemd unit"
 sed -e "s|__USER__|$USER_NAME|g" -e "s|__DIR__|$DIR|g" -e "s|__PORT__|$PORT|g" \
   "$DIR/deploy/ola-service.service.template" | sudo tee /etc/systemd/system/ola-service.service >/dev/null
