@@ -50,13 +50,23 @@ def test_session_expired_states(response):
     assert res.status == FetchStatus.SESSION_EXPIRED
 
 
-def test_no_cookie_is_expired_without_request():
-    def handler(req):  # pragma: no cover
-        raise AssertionError("must not call the site")
+def test_no_cookie_sends_anonymous_request():
+    seen = []
+
+    def handler(req):
+        seen.append(req.headers.get("cookie"))
+        return httpx.Response(302, headers={"location": "/login"})  # shop wants a session
 
     c = ShopClient(ShopConfig(base_url=CFG.base_url, cookie=""),
                    transport=httpx.MockTransport(handler))
     assert c.fetch_order(1).status == FetchStatus.SESSION_EXPIRED
+    assert seen == [None]  # the request was sent, without any cookie
+
+
+def test_no_cookie_works_if_shop_allows_it():
+    c = ShopClient(ShopConfig(base_url=CFG.base_url, cookie=""),
+                   transport=httpx.MockTransport(lambda r: httpx.Response(200, json=FIXTURE)))
+    assert c.fetch_order(558938).status == FetchStatus.OK
 
 
 def test_network_error():

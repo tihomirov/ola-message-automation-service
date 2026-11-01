@@ -145,7 +145,7 @@ def order(number: str) -> dict:
 @protected.get("/config")
 def get_config() -> dict:
     cfg = _cfg()
-    return {"config": masked_dict(cfg), "problems": cfg.problems()}
+    return {"config": masked_dict(cfg), "problems": cfg.problems(), "warnings": cfg.warnings()}
 
 
 @protected.put("/config")
@@ -156,7 +156,7 @@ def put_config(update: dict = Body(...)) -> dict:
         raise HTTPException(422, str(e))
     save_config(cfg)
     runtime.restart_worker()
-    return {"config": masked_dict(cfg), "problems": cfg.problems()}
+    return {"config": masked_dict(cfg), "problems": cfg.problems(), "warnings": cfg.warnings()}
 
 
 # ------------------------------------------------------------------ actions

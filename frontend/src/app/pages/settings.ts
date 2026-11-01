@@ -34,6 +34,14 @@ const fromLines = (s: string) => s.split(/[\n,;]+/).map((x) => x.trim()).filter(
         </mat-card>
       }
 
+      @if (warnings().length) {
+        <mat-card class="warnings">
+          <mat-card-content>
+            @for (w of warnings(); track w) { <div>⚠️ {{ w }}</div> }
+          </mat-card-content>
+        </mat-card>
+      }
+
       <mat-card>
         <mat-card-header><mat-card-title>Flow</mat-card-title></mat-card-header>
         <mat-card-content>
@@ -163,6 +171,7 @@ const fromLines = (s: string) => s.split(/[\n,;]+/).map((x) => x.trim()).filter(
     .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 12px 0; }
     .sticky { position: sticky; bottom: 0; background: var(--mat-sys-surface); z-index: 1; }
     .problems { background: var(--mat-sys-error-container); color: var(--mat-sys-on-error-container); }
+    .warnings { background: #fff8e1; color: #5d4300; }
     .error { color: var(--mat-sys-error); }
     pre { white-space: pre-wrap; word-break: break-word; background: var(--mat-sys-surface-container); padding: 12px; border-radius: 6px; }
   `,
@@ -172,6 +181,7 @@ export class SettingsPage {
   private readonly snack = inject(MatSnackBar);
   readonly f = signal<Form | null>(null);
   readonly problems = signal<string[]>([]);
+  readonly warnings = signal<string[]>([]);
   readonly error = signal('');
   readonly busy = signal(false);
   readonly dry = signal<DryRun | null>(null);
@@ -191,7 +201,7 @@ export class SettingsPage {
     this.version.update((v) => v + 1);
   }
 
-  private setForm(cfg: AppConfig, problems: string[]) {
+  private setForm(cfg: AppConfig, problems: string[], warnings: string[] = []) {
     const { template: _t, ...rest } = cfg;
     const form: Form = {
       ...structuredClone(rest),
@@ -204,13 +214,14 @@ export class SettingsPage {
     this.f.set(form);
     this.saved = JSON.stringify(form);
     this.problems.set(problems);
+    this.warnings.set(warnings);
     this.touch();
   }
 
   async load() {
     try {
       const r = await this.api.config();
-      this.setForm(r.config, r.problems);
+      this.setForm(r.config, r.problems, r.warnings);
     } catch (e) {
       this.error.set(errorText(e));
     }
@@ -227,7 +238,7 @@ export class SettingsPage {
         email: { ...f.email, to: fromLines(f.lists.to) },
         storage: f.storage,
       });
-      this.setForm(r.config, r.problems);
+      this.setForm(r.config, r.problems, r.warnings);
       await this.api.loadMeta();
       this.snack.open(r.problems.length ? 'Saved. The worker is not running yet: see above.' : 'Saved. Mail worker restarted.', 'OK', { duration: 4000 });
     } catch (e) {

@@ -62,3 +62,15 @@ def test_feature_flag_from_config_and_env(tmp_path, monkeypatch):
     assert load_features(cfg).fetch_order_details is True
     monkeypatch.setenv("OLA_FETCH_ORDER_DETAILS", "false")
     assert load_features(cfg).fetch_order_details is False
+
+
+def test_flow2_without_shop_access_is_a_warning_not_a_blocker(tmp_path):
+    p = tmp_path / "c.yaml"
+    p.write_text(
+        "features: {fetch_order_details: true}\n"
+        "mailbox: {enabled: true, username: bot@gmail.com, password: app}\n"
+        "email: {enabled: true, to: [me@x.com]}\n"
+    )
+    cfg = load_config(p)
+    assert cfg.problems() == []
+    assert len(cfg.warnings()) == 1 and "flow 2" in cfg.warnings()[0]

@@ -93,12 +93,20 @@ def _features_safe():
         return None
 
 
+def _warnings_safe() -> list[str]:
+    try:
+        return load_config().warnings()
+    except ConfigError:
+        return []
+
+
 def worker_status() -> dict:
     st = worker_mod.STATE
     r = st.last_result
     out = {
         "running": st.running,
         "problems": st.problems,
+        "warnings": _warnings_safe(),
         "last_poll": fmt_ts(st.last_poll_at) if st.last_poll_at else None,
         "last_ok": fmt_ts(st.last_ok_at) if st.last_ok_at else None,
         "last_error": st.last_error,

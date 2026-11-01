@@ -56,6 +56,7 @@ export interface AppConfig {
 export interface ConfigResponse {
   config: AppConfig;
   problems: string[];
+  warnings?: string[];
 }
 
 export interface OrderRow {
@@ -92,6 +93,7 @@ export interface Status {
   worker: {
     running: boolean;
     problems: string[];
+    warnings?: string[];
     last_poll: string | null;
     last_ok: string | null;
     last_error: string;

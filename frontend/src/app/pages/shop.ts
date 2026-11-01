@@ -16,7 +16,8 @@ import { Api, AppConfig, ShopTest, errorText } from '../api';
   template: `
     <h2>Shop (flow 2)</h2>
     <p class="hint">Used to fetch order details (sizes) from the shop admin. The service logs in by itself
-      and logs in again when the session expires. The cookie is only a fallback.</p>
+      and logs in again when the session expires. The cookie is only a fallback.
+      With neither set, requests are sent without a session: use <b>Fetch</b> below to see whether the shop allows that.</p>
     @if (error()) { <p class="error">{{ error() }}</p> }
     @if (shop(); as s) {
       <mat-card>

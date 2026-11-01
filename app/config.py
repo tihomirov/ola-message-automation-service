@@ -138,10 +138,16 @@ class AppConfig:
                 out.append("email.to is empty")
             if not (self.smtp_username() and self.smtp_password()):
                 out.append("SMTP credentials are not set (email.* or mailbox.*)")
+        return out
+
+    def warnings(self) -> list[str]:
+        """Things that don't stop the worker but are worth knowing."""
+        out = []
         if self.features.fetch_order_details and not (
             (self.shop.login_email and self.shop.login_password) or self.shop.cookie
         ):
-            out.append("flow 2 is on but shop.login_* or shop.cookie is not set")
+            out.append("flow 2: no shop login or cookie set; requests are sent without a session "
+                       "(if the shop refuses them, messages go out with SIZE/COLOR placeholders)")
         return out
 
 

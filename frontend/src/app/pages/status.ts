@@ -32,6 +32,7 @@ function dur(s: number): string {
                 @else { <span class="bad">not running</span> }
               </td></tr>
               @for (p of s.worker.problems; track p) { <tr><td></td><td class="bad">{{ p }}</td></tr> }
+              @for (w of s.worker.warnings ?? []; track w) { <tr><td></td><td class="warn">⚠️ {{ w }}</td></tr> }
               <tr><td>Last poll</td><td>{{ s.worker.last_poll || '—' }}</td></tr>
               <tr><td>Last OK</td><td>{{ s.worker.last_ok || '—' }}</td></tr>
               @if (s.worker.last_result; as r) {
@@ -101,6 +102,7 @@ function dur(s: number): string {
     td:first-child { color: var(--mat-sys-on-surface-variant); white-space: nowrap; }
     .ok { color: #2e7d32; font-weight: 500; }
     .bad { color: var(--mat-sys-error); font-weight: 500; }
+    .warn { color: #8d6e00; }
     .small { font-size: 12px; }
     .error { color: var(--mat-sys-error); }
   `,

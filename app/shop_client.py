@@ -390,8 +390,8 @@ class ShopClient:
         return res
 
     def _find_order_once(self, number: str) -> FetchResult:
-        if not self.cookie_names():
-            return FetchResult(FetchStatus.SESSION_EXPIRED, detail="no session cookie")
+        # no cookie and no login: the request is still sent (anonymously); if the shop
+        # requires a session it answers with a redirect/HTML -> SESSION_EXPIRED
         base = self.cfg.base_url.rstrip("/")
         wanted = _norm_number(number)
         try:
@@ -405,8 +405,6 @@ class ShopClient:
         return interpret_search(resp, wanted)
 
     def _fetch_order_once(self, order_id: int) -> FetchResult:
-        if not self.cookie_names():
-            return FetchResult(FetchStatus.SESSION_EXPIRED, detail="no session cookie")
         base = self.cfg.base_url.rstrip("/")
         try:
             resp = self._post(
