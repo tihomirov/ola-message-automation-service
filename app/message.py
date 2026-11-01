@@ -1,16 +1,21 @@
 """Builds the notification text. Hardcoded template for the MVP.
 
-If the shop session is expired, sizes are unknown and SIZE_PLACEHOLDER is used,
-plus a warning line telling the operator to refresh the cookie in the admin.
+Flow 1 (status=None): built from the order email alone; items are shown exactly
+as the email lists them, no size lines and no shop warnings.
+
+Flow 2 (status given): order details from the shop admin add sizes. If the
+fetch failed, sizes are unknown: SIZE_PLACEHOLDER is used, plus a warning line.
 """
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 from urllib.parse import quote
 
-from .shop_client import FetchStatus, OrderDetails
+if TYPE_CHECKING:  # flow 2 only; flow 1 never imports the shop client
+    from .shop_client import FetchStatus, OrderDetails
 
 SIZE_PLACEHOLDER = "❓ уточнити!!!"
 
@@ -24,6 +29,12 @@ class EmailOrder:
     phone: str | None
     items: list[str] = field(default_factory=list)  # raw item lines
     total: str | None = None
+    customer_email: str | None = None
+    delivery: str | None = None
+    address: str | None = None
+    payment: str | None = None
+    additions: str | None = None
+    comment: str | None = None
 
 
 def phone_digits(phone: str | None) -> str | None:
@@ -46,9 +57,11 @@ def chat_links(phone: str | None) -> dict[str, str]:
 
 def build_message(
     email_order: EmailOrder,
-    status: FetchStatus,
-    details: OrderDetails | None,
+    status: "FetchStatus | None" = None,
+    details: "OrderDetails | None" = None,
 ) -> str:
+    """status=None -> flow 1 (email only). Otherwise flow 2 (with shop details)."""
+    st = getattr(status, "value", status)  # FetchStatus -> "ok" / "session_expired" / ...
     name = (details.customer_name if details else "") or email_order.customer_name
     phone = (details.phone if details else None) or email_order.phone
 
@@ -57,7 +70,10 @@ def build_message(
         lines.append(f"📞 {phone}")
     lines.append("")
 
-    if status == FetchStatus.OK and details:
+    if st is None:  # flow 1
+        for raw in email_order.items or ["(товари див. у листі)"]:
+            lines.append(f"• {raw}")
+    elif st == "ok" and details:
         for it in details.items:
             size = it.size or SIZE_PLACEHOLDER
             lines.append(f"• {it.name} — розмір: {size} (x{it.count})")
@@ -69,13 +85,23 @@ def build_message(
     if total:
         lines += ["", f"💰 Всього: {total}"]
 
+    extra = [
+        f"🚚 {email_order.delivery}" if email_order.delivery else "",
+        f"📍 {email_order.address}" if email_order.address else "",
+        f"💳 {email_order.payment}" if email_order.payment else "",
+        f"📝 {email_order.comment}" if email_order.comment else "",
+    ]
+    extra = [x for x in extra if x]
+    if extra:
+        lines += [""] + extra
+
     links = chat_links(phone)
     if links:
         lines += ["", "💬 " + " | ".join(f"{k}: {v}" for k, v in links.items())]
 
-    if status == FetchStatus.SESSION_EXPIRED:
+    if st == "session_expired":
         lines += ["", "⚠️ Сесія адмінки закінчилась — оновіть cookie в адмінці сервісу, "
                       "щоб отримувати розміри."]
-    elif status in (FetchStatus.ERROR, FetchStatus.NOT_FOUND):
+    elif st in ("error", "not_found"):
         lines += ["", "⚠️ Не вдалося отримати деталі замовлення з сайту."]
     return "\n".join(lines)

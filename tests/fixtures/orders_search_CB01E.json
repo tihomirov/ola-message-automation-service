@@ -1,0 +1,54 @@
+{
+  "type": "success",
+  "result": {
+    "Model": {
+      "EnablePreOrders": false,
+      "Orders": [
+        {
+          "StatusID": 1327,
+          "ManagerID": null,
+          "IsAvailable": [true],
+          "PreOrder": false,
+          "PaymentName": "Накладений платіж (оплата при отриманні)",
+          "PaymentStatus": null,
+          "PaymentStatusNative": null,
+          "PaymentProccessor": null,
+          "PaymentStatusColor": "#66bb6a",
+          "Delivery": "Самовивіз з «Нова Пошта»",
+          "Status": "Фейкові",
+          "StatusColor": "#66bb6a",
+          "ID": 1365649,
+          "UserID": 336245,
+          "CurrencyID": 83640,
+          "OrderNumber": "CB01E",
+          "Client": "Антон Тихомиров",
+          "PromoCodeID": null,
+          "Date": "2026-10-31T08:53:13.19Z",
+          "Prices": [
+            {"CurrencyID": 83640, "Count": 1, "CountParts": 0, "PartsInUnit": null,
+             "Price": 4900.00, "ActionPrice": 2450.00, "FinalPrice": 2450.00,
+             "PromoPrice": null, "Discount": 0.0}
+          ],
+          "Discount": 0.0,
+          "FormatDiscount": "0 ₴",
+          "FinalPrice": "2 450 ₴",
+          "TaxesJson": null,
+          "Price": 4900.0,
+          "ActionPrice": 2450.0,
+          "DeliveryPrice": 0.00,
+          "AdditionsPrice": 0.00,
+          "TaxesPrice": 0.0
+        }
+      ]
+    },
+    "Initiator": {"UserID": 336245, "IsAdmin": true, "Statuses": [], "Managers": []},
+    "Pagination": {"ItemsCount": 1, "CurrentPage": 1, "ItemsPerPage": 10, "PagesCount": 1},
+    "Title": "Замовлення",
+    "Section": "Магазин",
+    "GroupID": 1,
+    "ElementID": 0,
+    "ItemID": "Orders"
+  },
+  "redirect": null,
+  "view": null
+}

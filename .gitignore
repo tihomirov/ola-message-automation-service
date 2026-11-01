@@ -6,3 +6,5 @@ config.yaml
 .env
 cookie.txt
 _to_delete/
+# real order emails (customer data)
+samples/

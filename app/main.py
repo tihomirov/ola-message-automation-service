@@ -19,6 +19,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import FastAPI
+
+from .settings import load_features
 from fastapi.responses import HTMLResponse
 
 try:
@@ -175,6 +177,7 @@ def health() -> dict:
         "process_uptime_s": int(time.time() - PROCESS_STARTED),
         "vm_uptime_s": int(vm_uptime()),
         "memory_mib": meminfo(),
+        "features": {"fetch_order_details": load_features().fetch_order_details},
         "heartbeat": {**hb, "gaps": hb["gaps"][-20:]},
     }
 
@@ -198,6 +201,8 @@ def index() -> str:
         for g in reversed(hb["gaps"][-50:])
     ) or "<tr><td colspan='4'>No gaps yet 🎉</td></tr>"
 
+    mode = ("email + order details from the shop" if load_features().fetch_order_details
+            else "email only (order details fetch: off)")
     first = fmt_ts(hb["first"]) if hb["first"] else "—"
     last = fmt_ts(hb["last"]) if hb["last"] else "—"
 
@@ -227,6 +232,7 @@ def index() -> str:
 <tr><td>Memory available / total</td><td>{mem.get('MemAvailable', '?')} / {mem.get('MemTotal', '?')} MiB</td></tr>
 <tr><td>Swap free / total</td><td>{mem.get('SwapFree', '?')} / {mem.get('SwapTotal', '?')} MiB</td></tr>
 <tr><td>This process RSS</td><td>{mem.get('ProcessRSS', '?')} MiB</td></tr>
+<tr><td>Mode</td><td>{mode}</td></tr>
 </table>
 
 <h2>Network (checked on page load)</h2>

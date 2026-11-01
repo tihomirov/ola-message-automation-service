@@ -8,6 +8,8 @@ User=__USER__
 WorkingDirectory=__DIR__
 Environment=PYTHONUNBUFFERED=1
 Environment=OLA_TZ=Europe/Kyiv
+# Flow 2: fetch order details from the shop admin (true/false). Default: false.
+Environment=OLA_FETCH_ORDER_DETAILS=false
 ExecStart=__DIR__/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port __PORT__
 Restart=always
 RestartSec=5
